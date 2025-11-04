@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,7 +7,237 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ==================== USER MANAGEMENT ====================
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  passwordHash     String
+  firstName        String?
+  lastName         String?
+  role             UserRole       @default(USER)
+  isEmailVerified  Boolean        @default(false)
+  emailVerifiedAt  DateTime?
+  twoFactorEnabled Boolean        @default(false)
+  twoFactorSecret  String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  accounts         Account[]
+  alerts           Alert[]
+  assets           Asset[]
+  auditLogs        AuditLog[]
+  refreshTokens    RefreshToken[]
+  sharedAccesses   SharedAccess[] @relation("SharedAccessOwner")
+  receivedAccesses SharedAccess[] @relation("SharedAccessRecipient")
+  subscription     Subscription?
+  transactions     Transaction[]
+  profile          UserProfile?
+
+  @@index([email])
+  @@map("users")
+}
+
+model UserProfile {
+  id                 String    @id @default(uuid())
+  userId             String    @unique
+  phoneNumber        String?
+  dateOfBirth        DateTime?
+  address            String?
+  city               String?
+  postalCode         String?
+  country            String?   @default("FR")
+  currency           String    @default("EUR")
+  timezone           String    @default("Europe/Paris")
+  language           String    @default("fr")
+  consentMarketing   Boolean   @default(false)
+  consentAnalytics   Boolean   @default(false)
+  consentDataSharing Boolean   @default(false)
+  avatarUrl          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model Account {
+  id                    String          @id @default(uuid())
+  userId                String
+  name                  String
+  type                  AccountType
+  provider              AccountProvider @default(MANUAL)
+  externalId            String?
+  externalAccountNumber String?
+  balance               Float           @default(0)
+  currency              String          @default("EUR")
+  lastSyncedAt          DateTime?
+  syncEnabled           Boolean         @default(true)
+  metadata              Json?
+  isActive              Boolean         @default(true)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets                Asset[]
+  transactions          Transaction[]
+
+  @@index([userId])
+  @@index([type])
+  @@map("accounts")
+}
+
+model Asset {
+  id               String    @id @default(uuid())
+  userId           String
+  accountId        String?
+  name             String
+  type             AssetType
+  symbol           String?
+  isin             String?
+  quantity         Float     @default(0)
+  purchasePrice    Float
+  purchaseDate     DateTime?
+  currentPrice     Float
+  currency         String    @default("EUR")
+  totalValue       Float
+  totalGain        Float     @default(0)
+  totalGainPercent Float     @default(0)
+  metadata         Json?
+  lastPriceUpdate  DateTime?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  account          Account?  @relation(fields: [accountId], references: [id])
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([type])
+  @@index([symbol])
+  @@map("assets")
+}
+
+model Transaction {
+  id          String              @id @default(uuid())
+  userId      String
+  accountId   String?
+  date        DateTime            @default(now())
+  amount      Float
+  type        TransactionType
+  category    TransactionCategory @default(OTHER)
+  description String?
+  notes       String?
+  externalId  String?
+  metadata    Json?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  account     Account?            @relation(fields: [accountId], references: [id])
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([date])
+  @@index([type])
+  @@index([category])
+  @@map("transactions")
+}
+
+model Alert {
+  id              String      @id @default(uuid())
+  userId          String
+  name            String
+  type            AlertType
+  status          AlertStatus @default(ACTIVE)
+  conditions      Json
+  notifyEmail     Boolean     @default(true)
+  notifyPush      Boolean     @default(false)
+  lastTriggeredAt DateTime?
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@map("alerts")
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  userId               String             @unique
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  plan                 SubscriptionPlan   @default(FREE)
+  status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  canceledAt           DateTime?
+  trialStart           DateTime?
+  trialEnd             DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
+  @@index([plan])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model SharedAccess {
+  id               String           @id @default(uuid())
+  ownerId          String
+  sharedWithUserId String?
+  sharedWithEmail  String
+  permission       AccessPermission @default(VIEW)
+  scope            Json?
+  expiresAt        DateTime?
+  isActive         Boolean          @default(true)
+  acceptedAt       DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  owner            User             @relation("SharedAccessOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  sharedWithUser   User?            @relation("SharedAccessRecipient", fields: [sharedWithUserId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([sharedWithUserId])
+  @@index([sharedWithEmail])
+  @@map("shared_accesses")
+}
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?
+  action     AuditAction
+  entityType String?
+  entityId   String?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+  user       User?       @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
 
 enum UserRole {
   USER
@@ -32,202 +259,39 @@ enum SubscriptionStatus {
   INCOMPLETE
 }
 
-model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
-  passwordHash      String
-  firstName         String?
-  lastName          String?
-  role              UserRole  @default(USER)
-  isEmailVerified   Boolean   @default(false)
-  emailVerifiedAt   DateTime?
-  twoFactorEnabled  Boolean   @default(false)
-  twoFactorSecret   String?
-
-  // Relations
-  profile           UserProfile?
-  accounts          Account[]
-  assets            Asset[]
-  transactions      Transaction[]
-  alerts            Alert[]
-  subscription      Subscription?
-  sharedAccesses    SharedAccess[]     @relation("SharedAccessOwner")
-  receivedAccesses  SharedAccess[]     @relation("SharedAccessRecipient")
-  refreshTokens     RefreshToken[]
-  auditLogs         AuditLog[]
-
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  @@index([email])
-  @@map("users")
-}
-
-model UserProfile {
-  id                String    @id @default(uuid())
-  userId            String    @unique
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  phoneNumber       String?
-  dateOfBirth       DateTime?
-  address           String?
-  city              String?
-  postalCode        String?
-  country           String?   @default("FR")
-
-  // Preferences
-  currency          String    @default("EUR")
-  timezone          String    @default("Europe/Paris")
-  language          String    @default("fr")
-
-  // RGPD
-  consentMarketing  Boolean   @default(false)
-  consentAnalytics  Boolean   @default(false)
-  consentDataSharing Boolean  @default(false)
-
-  avatarUrl         String?
-
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  @@map("user_profiles")
-}
-
-model RefreshToken {
-  id                String    @id @default(uuid())
-  userId            String
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token             String    @unique
-  expiresAt         DateTime
-  isRevoked         Boolean   @default(false)
-
-  createdAt         DateTime  @default(now())
-
-  @@index([userId])
-  @@index([token])
-  @@map("refresh_tokens")
-}
-
-// ==================== FINANCIAL ACCOUNTS ====================
-
 enum AccountType {
-  BANK              // Compte bancaire
-  CRYPTO            // Portefeuille crypto
-  SCPI              // SCPI
-  INSURANCE         // Assurance-vie
-  REAL_ESTATE       // Immobilier
-  STOCK             // Compte-titres / PEA
-  PEL               // Plan Épargne Logement
-  SAVINGS           // Livret A, LDD, etc.
+  BANK
+  CRYPTO
+  SCPI
+  INSURANCE
+  REAL_ESTATE
+  STOCK
+  PEL
+  SAVINGS
 }
 
 enum AccountProvider {
-  MANUAL            // Saisie manuelle
-  BUDGET_INSIGHT    // Budget Insight (agrégation FR)
-  PLAID             // Plaid (agrégation US/international)
-  COINBASE          // Coinbase
-  BINANCE           // Binance
-  METAMASK          // MetaMask (blockchain)
+  MANUAL
+  BUDGET_INSIGHT
+  PLAID
+  COINBASE
+  BINANCE
+  METAMASK
   OTHER
 }
-
-model Account {
-  id                String          @id @default(uuid())
-  userId            String
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  name              String          // Ex: "Compte Courant BNP", "Portefeuille Bitcoin"
-  type              AccountType
-  provider          AccountProvider @default(MANUAL)
-
-  // External aggregation
-  externalId        String?         // ID du compte chez le provider
-  externalAccountNumber String?     // Numéro de compte masqué
-
-  balance           Float           @default(0)
-  currency          String          @default("EUR")
-
-  // Sync
-  lastSyncedAt      DateTime?
-  syncEnabled       Boolean         @default(true)
-
-  // Metadata
-  metadata          Json?           // Données spécifiques (ex: adresse wallet crypto)
-
-  isActive          Boolean         @default(true)
-
-  // Relations
-  assets            Asset[]
-  transactions      Transaction[]
-
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@index([userId])
-  @@index([type])
-  @@map("accounts")
-}
-
-// ==================== ASSETS ====================
 
 enum AssetType {
-  STOCK             // Action
-  ETF               // ETF
-  BOND              // Obligation
-  CRYPTO            // Cryptomonnaie
-  SCPI              // Part SCPI
-  REAL_ESTATE       // Bien immobilier
-  COMMODITY         // Matière première (or, etc.)
-  FUND              // Fonds
-  CASH              // Liquidités
+  STOCK
+  ETF
+  BOND
+  CRYPTO
+  SCPI
+  REAL_ESTATE
+  COMMODITY
+  FUND
+  CASH
   OTHER
 }
-
-model Asset {
-  id                String      @id @default(uuid())
-  userId            String
-  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accountId         String?
-  account           Account?    @relation(fields: [accountId], references: [id], onDelete: SetNull)
-
-  name              String      // Ex: "Apple Inc.", "Bitcoin", "Appartement Paris 15e"
-  type              AssetType
-
-  // Identification
-  symbol            String?     // Ticker (AAPL, BTC, etc.)
-  isin              String?     // Code ISIN pour actions/ETF
-
-  // Quantity & Value
-  quantity          Float       @default(0)
-  purchasePrice     Float       // Prix d'achat unitaire
-  purchaseDate      DateTime?
-  currentPrice      Float       // Prix actuel unitaire
-  currency          String      @default("EUR")
-
-  // Performance
-  totalValue        Float       // quantity * currentPrice
-  totalGain         Float       @default(0) // Gain/perte total
-  totalGainPercent  Float       @default(0) // Gain/perte en %
-
-  // Metadata (pour immobilier, SCPI, etc.)
-  metadata          Json?       // { address, surface, photos, etc. }
-
-  // Sync
-  lastPriceUpdate   DateTime?
-
-  isActive          Boolean     @default(true)
-
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-
-  @@index([userId])
-  @@index([accountId])
-  @@index([type])
-  @@index([symbol])
-  @@map("assets")
-}
-
-// ==================== TRANSACTIONS ====================
 
 enum TransactionType {
   DEBIT
@@ -235,61 +299,27 @@ enum TransactionType {
 }
 
 enum TransactionCategory {
-  SALARY            // Salaire
-  INVESTMENT        // Investissement
-  WITHDRAWAL        // Retrait
-  DEPOSIT           // Dépôt
-  DIVIDEND          // Dividende
-  INTEREST          // Intérêts
-  FEE               // Frais
-  TAX               // Impôts
-  TRANSFER          // Transfert
-  PURCHASE          // Achat
-  SALE              // Vente
-  RENT              // Loyer (reçu ou payé)
+  SALARY
+  INVESTMENT
+  WITHDRAWAL
+  DEPOSIT
+  DIVIDEND
+  INTEREST
+  FEE
+  TAX
+  TRANSFER
+  PURCHASE
+  SALE
+  RENT
   OTHER
 }
 
-model Transaction {
-  id                String              @id @default(uuid())
-  userId            String
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accountId         String?
-  account           Account?            @relation(fields: [accountId], references: [id], onDelete: SetNull)
-
-  date              DateTime            @default(now())
-  amount            Float
-  type              TransactionType
-  category          TransactionCategory @default(OTHER)
-
-  description       String?
-  notes             String?
-
-  // External
-  externalId        String?
-
-  // Metadata
-  metadata          Json?
-
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-
-  @@index([userId])
-  @@index([accountId])
-  @@index([date])
-  @@index([type])
-  @@index([category])
-  @@map("transactions")
-}
-
-// ==================== ALERTS ====================
-
 enum AlertType {
-  THRESHOLD         // Seuil de valorisation
-  DATE              // Date d'échéance
-  PERFORMANCE       // Performance atteinte
-  PRICE             // Prix d'actif
-  BALANCE           // Solde de compte
+  THRESHOLD
+  DATE
+  PERFORMANCE
+  PRICE
+  BALANCE
 }
 
 enum AlertStatus {
@@ -298,108 +328,11 @@ enum AlertStatus {
   DISMISSED
 }
 
-model Alert {
-  id                String        @id @default(uuid())
-  userId            String
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  name              String
-  type              AlertType
-  status            AlertStatus   @default(ACTIVE)
-
-  // Conditions (JSON)
-  // Ex: { "assetId": "xxx", "threshold": 50000, "operator": ">" }
-  conditions        Json
-
-  // Notification
-  notifyEmail       Boolean       @default(true)
-  notifyPush        Boolean       @default(false)
-
-  lastTriggeredAt   DateTime?
-
-  isActive          Boolean       @default(true)
-
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-
-  @@index([userId])
-  @@index([type])
-  @@index([status])
-  @@map("alerts")
-}
-
-// ==================== SUBSCRIPTIONS & PAYMENTS ====================
-
-model Subscription {
-  id                    String              @id @default(uuid())
-  userId                String              @unique
-  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Stripe
-  stripeCustomerId      String?             @unique
-  stripeSubscriptionId  String?             @unique
-  stripePriceId         String?
-
-  plan                  SubscriptionPlan    @default(FREE)
-  status                SubscriptionStatus  @default(ACTIVE)
-
-  currentPeriodStart    DateTime?
-  currentPeriodEnd      DateTime?
-  cancelAtPeriodEnd     Boolean             @default(false)
-  canceledAt            DateTime?
-
-  trialStart            DateTime?
-  trialEnd              DateTime?
-
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-
-  @@index([stripeCustomerId])
-  @@index([stripeSubscriptionId])
-  @@index([plan])
-  @@index([status])
-  @@map("subscriptions")
-}
-
-// ==================== SHARED ACCESS ====================
-
 enum AccessPermission {
-  VIEW              // Lecture seule
-  EDIT              // Modification
-  ADMIN             // Administration complète
+  VIEW
+  EDIT
+  ADMIN
 }
-
-model SharedAccess {
-  id                String            @id @default(uuid())
-  ownerId           String
-  owner             User              @relation("SharedAccessOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-
-  sharedWithUserId  String?
-  sharedWithUser    User?             @relation("SharedAccessRecipient", fields: [sharedWithUserId], references: [id], onDelete: Cascade)
-  sharedWithEmail   String            // Email du destinataire (peut ne pas être inscrit)
-
-  permission        AccessPermission  @default(VIEW)
-
-  // Scope (JSON) - quels comptes/actifs sont partagés
-  // Ex: { "accountIds": ["xxx", "yyy"], "assetIds": ["zzz"] }
-  scope             Json?
-
-  expiresAt         DateTime?
-  isActive          Boolean           @default(true)
-
-  acceptedAt        DateTime?
-  revokedAt         DateTime?
-
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-
-  @@index([ownerId])
-  @@index([sharedWithUserId])
-  @@index([sharedWithEmail])
-  @@map("shared_accesses")
-}
-
-// ==================== AUDIT LOGS (RGPD) ====================
 
 enum AuditAction {
   USER_LOGIN
@@ -420,26 +353,4 @@ enum AuditAction {
   ALERT_CREATE
   SUBSCRIPTION_UPDATE
   SHARED_ACCESS_CREATE
-}
-
-model AuditLog {
-  id                String        @id @default(uuid())
-  userId            String?
-  user              User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  action            AuditAction
-  entityType        String?       // "User", "Account", "Asset", etc.
-  entityId          String?
-
-  ipAddress         String?
-  userAgent         String?
-
-  metadata          Json?         // Détails supplémentaires
-
-  createdAt         DateTime      @default(now())
-
-  @@index([userId])
-  @@index([action])
-  @@index([createdAt])
-  @@map("audit_logs")
 }

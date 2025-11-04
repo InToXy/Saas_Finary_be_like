@@ -33,6 +33,10 @@ export default function LoginPage() {
 
     try {
       const { accessToken, refreshToken } = await authService.login(data);
+      
+      // Temporarily store the token to make the getMe() call work
+      setAuth({ id: '', email: data.email, role: 'USER' }, accessToken, refreshToken);
+      
       const userData = await authService.getMe();
       setAuth(userData, accessToken, refreshToken);
       navigate('/dashboard');
