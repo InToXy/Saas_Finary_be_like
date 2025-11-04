@@ -16,11 +16,18 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       throw new Error('Cannot clean database in production');
     }
 
-    const models = Reflect.ownKeys(this).filter((key) => key[0] !== '_');
+    // Get all model names from PrismaClient
+    const modelNames = Reflect.ownKeys(this).filter(
+      (key) => typeof key === 'string' && !key.startsWith('_') && !key.startsWith('$'),
+    ) as string[];
 
     return Promise.all(
-      models.map((modelKey) => {
-        return this[modelKey].deleteMany();
+      modelNames.map((modelName) => {
+        const model = (this as any)[modelName];
+        if (model && typeof model.deleteMany === 'function') {
+          return model.deleteMany();
+        }
+        return Promise.resolve();
       }),
     );
   }
