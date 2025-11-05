@@ -21,7 +21,7 @@ export class YahooFinanceService {
     }
 
     try {
-      const quote = await yahooFinance.quote(symbol);
+      const quote: any = await yahooFinance.quote(symbol);
 
       if (!quote) {
         this.logger.warn(`No data found for symbol: ${symbol}`);
@@ -76,7 +76,7 @@ export class YahooFinanceService {
     }
 
     try {
-      const quote = await yahooFinance.quote(symbol);
+      const quote: any = await yahooFinance.quote(symbol);
       return quote?.regularMarketPrice || null;
     } catch (error: any) {
       this.logger.error(`Failed to fetch simple price for ${symbol}: ${error.message}`);
@@ -98,13 +98,13 @@ export class YahooFinanceService {
     }
 
     try {
-      const result = await yahooFinance.historical(symbol, {
+      const result: any = await yahooFinance.historical(symbol, {
         period1,
         period2,
         interval,
       });
 
-      return result.map(item => ({
+      return result.map((item: any) => ({
         date: item.date,
         open: item.open,
         high: item.high,
@@ -127,9 +127,9 @@ export class YahooFinanceService {
     }
 
     try {
-      const results = await yahooFinance.search(query);
+      const results: any = await yahooFinance.search(query);
 
-      return results.quotes.slice(0, 10).map(quote => ({
+      return results.quotes.slice(0, 10).map((quote: any) => ({
         symbol: quote.symbol,
         name: quote.longname || quote.shortname || quote.symbol,
         type: quote.quoteType || 'EQUITY',

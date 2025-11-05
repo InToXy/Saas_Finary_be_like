@@ -77,11 +77,11 @@ export class BinanceService {
       const pricesResponse = await this.client.get('/ticker/price');
       const statsResponse = await this.client.get('/ticker/24hr');
 
-      const pricesMap = new Map(
+      const pricesMap = new Map<string, number>(
         pricesResponse.data.map((item: any) => [item.symbol, parseFloat(item.price)])
       );
 
-      const statsMap = new Map(
+      const statsMap = new Map<string, { priceChange: number; priceChangePercent: number; volume: number }>(
         statsResponse.data.map((item: any) => [
           item.symbol,
           {

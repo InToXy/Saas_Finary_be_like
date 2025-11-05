@@ -18,7 +18,7 @@ export class AlphaVantageService {
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('ALPHA_VANTAGE_API_KEY') || '';
     this.apiUrl = this.configService.get<string>('ALPHA_VANTAGE_API_URL') || 'https://www.alphavantage.co/query';
-    this.enabled = this.apiKey && this.apiKey !== 'YOUR_API_KEY_HERE';
+    this.enabled = !!this.apiKey && this.apiKey !== 'YOUR_API_KEY_HERE';
 
     this.client = axios.create({
       baseURL: this.apiUrl,

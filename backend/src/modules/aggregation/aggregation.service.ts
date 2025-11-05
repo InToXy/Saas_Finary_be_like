@@ -135,7 +135,7 @@ export class AggregationService {
 
       this.logger.log(`Found ${assets.length} assets to update`);
 
-      return await this.updateAssetsPrices(assets.map(a => a.id));
+      return await this.updateAssetsPrices(assets.map((a: { id: string }) => a.id));
     } catch (error: any) {
       this.logger.error(`Failed to update all assets: ${error.message}`);
       return { success: 0, failed: 0, details: [] };
