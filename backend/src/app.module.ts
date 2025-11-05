@@ -20,6 +20,7 @@ import { AggregationModule } from './modules/aggregation/aggregation.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SharedAccessModule } from './modules/shared-access/shared-access.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { UploadModule } from './modules/upload/upload.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     NotificationsModule,
     SharedAccessModule,
     ReportsModule,
+    UploadModule,
   ],
 })
 export class AppModule {}

@@ -98,34 +98,92 @@ model Account {
 }
 
 model Asset {
-  id               String    @id @default(uuid())
+  id               String            @id @default(uuid())
   userId           String
   accountId        String?
   name             String
   type             AssetType
   symbol           String?
   isin             String?
-  quantity         Float     @default(0)
+  quantity         Float             @default(1)
   purchasePrice    Float
   purchaseDate     DateTime?
   currentPrice     Float
-  currency         String    @default("EUR")
+  currency         String            @default("EUR")
   totalValue       Float
-  totalGain        Float     @default(0)
-  totalGainPercent Float     @default(0)
+  totalGain        Float             @default(0)
+  totalGainPercent Float             @default(0)
   metadata         Json?
   lastPriceUpdate  DateTime?
-  isActive         Boolean   @default(true)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  account          Account?  @relation(fields: [accountId], references: [id])
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isActive         Boolean           @default(true)
+  description      String?
+  brand            String?
+  model            String?
+  year             Int?
+  condition        String?
+  serialNumber     String?
+  certification    String?
+  thumbnailUrl     String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  account          Account?          @relation(fields: [accountId], references: [id])
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images           AssetImage[]
+  priceHistory     PriceHistory[]
+  predictions      AssetPrediction[]
 
   @@index([userId])
   @@index([accountId])
   @@index([type])
   @@index([symbol])
+  @@index([brand])
   @@map("assets")
+}
+
+model AssetImage {
+  id        String   @id @default(uuid())
+  assetId   String
+  url       String
+  filename  String
+  mimeType  String
+  size      Int
+  order     Int      @default(0)
+  isMain    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([isMain])
+  @@map("asset_images")
+}
+
+model PriceHistory {
+  id         String   @id @default(uuid())
+  assetId    String
+  price      Float
+  source     String   @default("API")
+  recordedAt DateTime @default(now())
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId, recordedAt])
+  @@map("price_history")
+}
+
+model AssetPrediction {
+  id             String   @id @default(uuid())
+  assetId        String
+  predictedPrice Float
+  confidence     Float
+  timeframe      String
+  algorithm      String
+  factors        Json?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+  asset          Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([expiresAt])
+  @@map("asset_predictions")
 }
 
 model Transaction {
@@ -290,6 +348,12 @@ enum AssetType {
   COMMODITY
   FUND
   CASH
+  LUXURY_WATCH
+  COLLECTOR_CAR
+  ARTWORK
+  WINE
+  JEWELRY
+  COLLECTIBLE
   OTHER
 }
 
