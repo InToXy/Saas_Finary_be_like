@@ -13,7 +13,7 @@ import {
 import { AssetsService } from './assets.service';
 import { CreateAssetDto, UpdateAssetDto, AssetResponseDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { AssetType } from '@prisma/client';
+import { AssetType } from '../../types/prisma-types';
 
 @Controller('assets')
 @UseGuards(JwtAuthGuard)

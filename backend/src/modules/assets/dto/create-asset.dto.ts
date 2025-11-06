@@ -7,7 +7,7 @@ import {
   IsUUID,
   Min,
 } from 'class-validator';
-import { AssetType } from '@prisma/client';
+import { AssetType } from '../../../types/prisma-types';
 
 export class CreateAssetDto {
   @IsString()

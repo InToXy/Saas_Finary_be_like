@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAssetDto, UpdateAssetDto, AssetResponseDto } from './dto';
-import { AssetType } from '@prisma/client';
+import { AssetType } from '../../types/prisma-types';
 
 @Injectable()
 export class AssetsService {
@@ -135,7 +135,7 @@ export class AssetsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return assets.map((asset) => this.mapToResponseDto(asset));
+    return assets.map((asset: any) => this.mapToResponseDto(asset));
   }
 
   async findOne(id: string, userId: string): Promise<AssetResponseDto> {
@@ -285,7 +285,7 @@ export class AssetsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return assets.map((asset) => this.mapToResponseDto(asset));
+    return assets.map((asset: any) => this.mapToResponseDto(asset));
   }
 
   private mapToResponseDto(asset: any): AssetResponseDto {
