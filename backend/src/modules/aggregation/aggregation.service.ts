@@ -6,6 +6,8 @@ import { CoinGeckoService } from './providers/coingecko.service';
 import { AlphaVantageService } from './providers/alpha-vantage.service';
 import { BinanceService } from './providers/binance.service';
 import { YahooFinanceService } from './providers/yahoo-finance.service';
+import { WatchMarketService } from './providers/watch-market.service';
+import { CarValuationService } from './providers/car-valuation.service';
 import { PriceHistoryService } from './providers/price-history.service';
 import { PriceDataDto, BulkUpdateResponseDto } from './dto/price.dto';
 
@@ -21,6 +23,8 @@ export class AggregationService {
     private readonly alphaVantage: AlphaVantageService,
     private readonly binance: BinanceService,
     private readonly yahooFinance: YahooFinanceService,
+    private readonly watchMarket: WatchMarketService,
+    private readonly carValuation: CarValuationService,
     private readonly priceHistory: PriceHistoryService,
   ) {
     this.priceUpdatesEnabled = this.configService.get<boolean>('ENABLE_PRICE_UPDATES') !== false;
@@ -40,6 +44,10 @@ export class AggregationService {
           currency: true,
           quantity: true,
           purchasePrice: true,
+          brand: true,
+          model: true,
+          year: true,
+          condition: true,
         },
       });
 
@@ -47,11 +55,12 @@ export class AggregationService {
         return { success: false, error: 'Asset not found' };
       }
 
-      if (!asset.symbol) {
+      // For collectibles, we don't require symbol
+      if (!asset.symbol && !['LUXURY_WATCH', 'COLLECTOR_CAR'].includes(asset.type)) {
         return { success: false, error: 'Asset has no symbol' };
       }
 
-      const priceData = await this.fetchPrice(asset.type, asset.symbol, asset.currency);
+      const priceData = await this.fetchPrice(asset);
 
       if (!priceData) {
         return { success: false, error: 'Failed to fetch price' };
@@ -145,28 +154,33 @@ export class AggregationService {
   /**
    * Fetch price from appropriate provider based on asset type
    */
-  private async fetchPrice(
-    assetType: string,
-    symbol: string,
-    currency: string,
-  ): Promise<PriceDataDto | null> {
+  private async fetchPrice(asset: any): Promise<PriceDataDto | null> {
     try {
-      switch (assetType) {
+      switch (asset.type) {
         case 'CRYPTO':
-          return await this.fetchCryptoPrice(symbol, currency);
+          return await this.fetchCryptoPrice(asset.symbol, asset.currency);
 
         case 'STOCK':
         case 'ETF':
         case 'BOND':
         case 'FUND':
-          return await this.fetchStockPrice(symbol);
+          return await this.fetchStockPrice(asset.symbol);
+
+        case 'LUXURY_WATCH':
+          return await this.fetchWatchPrice(asset);
+
+        case 'COLLECTOR_CAR':
+          return await this.fetchCarPrice(asset);
+
+        case 'COMMODITY':
+          return await this.fetchCommodityPrice(asset.symbol, asset.currency);
 
         default:
-          this.logger.warn(`Unsupported asset type for price fetching: ${assetType}`);
+          this.logger.warn(`Unsupported asset type for price fetching: ${asset.type}`);
           return null;
       }
     } catch (error: any) {
-      this.logger.error(`Failed to fetch price for ${symbol}: ${error.message}`);
+      this.logger.error(`Failed to fetch price for asset ${asset.id}: ${error.message}`);
       return null;
     }
   }
@@ -237,9 +251,140 @@ export class AggregationService {
   }
 
   /**
+   * Fetch watch price using brand, model and year
+   */
+  private async fetchWatchPrice(asset: any): Promise<PriceDataDto | null> {
+    if (!asset.brand || !asset.model) {
+      this.logger.warn(`Watch asset ${asset.id} missing brand or model`);
+      return null;
+    }
+
+    const watchData = await this.watchMarket.getEstimatedWatchValue(
+      asset.brand,
+      asset.model,
+      asset.condition || 'good',
+      asset.year,
+    );
+
+    if (watchData) {
+      return {
+        price: watchData.price,
+        currency: watchData.currency,
+        source: watchData.source,
+        timestamp: watchData.lastUpdated,
+        metadata: {
+          estimatedValue: watchData.estimatedValue,
+          marketTrend: watchData.marketTrend,
+        },
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Fetch car price using brand, model, year and other details
+   */
+  private async fetchCarPrice(asset: any): Promise<PriceDataDto | null> {
+    if (!asset.brand || !asset.model || !asset.year) {
+      this.logger.warn(`Car asset ${asset.id} missing brand, model or year`);
+      return null;
+    }
+
+    // Try collector car valuation first if it's likely a collectible
+    const currentYear = new Date().getFullYear();
+    const age = currentYear - asset.year;
+
+    if (age >= 25 || this.isLikelyCollectorCar(asset.brand, asset.model)) {
+      const collectorData = await this.carValuation.getCollectorCarValue(
+        asset.brand,
+        asset.model,
+        asset.year,
+        'rare', // Default rarity - could be configurable
+        asset.condition || 'good',
+        true, // originalParts - could be configurable
+        true, // documentation - could be configurable
+      );
+
+      if (collectorData) {
+        return {
+          price: collectorData.price,
+          currency: collectorData.currency,
+          source: collectorData.source,
+          timestamp: collectorData.lastUpdated,
+          metadata: {
+            estimatedValue: collectorData.estimatedValue,
+            marketTrend: collectorData.marketTrend,
+          },
+        };
+      }
+    }
+
+    // Fall back to regular car valuation
+    const carData = await this.carValuation.getCarValue(
+      asset.brand,
+      asset.model,
+      asset.year,
+      undefined, // mileage - could be added to asset model
+      undefined, // fuelType - could be added to asset model
+      asset.condition,
+    );
+
+    if (carData) {
+      return {
+        price: carData.price,
+        currency: carData.currency,
+        source: carData.source,
+        timestamp: carData.lastUpdated,
+        metadata: {
+          estimatedValue: carData.estimatedValue,
+          marketTrend: carData.marketTrend,
+        },
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Fetch commodity prices (gold, silver, oil, etc.)
+   */
+  private async fetchCommodityPrice(symbol: string, currency: string): Promise<PriceDataDto | null> {
+    // Use Yahoo Finance for commodities as fallback
+    if (this.yahooFinance.isEnabled()) {
+      const commodityPrice = await this.yahooFinance.getSimplePrice(symbol);
+      if (commodityPrice !== null) {
+        return {
+          price: commodityPrice,
+          currency: 'USD',
+          source: 'YAHOO_FINANCE',
+          timestamp: new Date(),
+        };
+      }
+    }
+
+    this.logger.warn(`No price data available for commodity ${symbol}`);
+    return null;
+  }
+
+  private isLikelyCollectorCar(brand: string, model: string): boolean {
+    const collectorBrands = [
+      'ferrari', 'lamborghini', 'porsche', 'aston martin', 'mclaren',
+      'bugatti', 'koenigsegg', 'pagani', 'lotus', 'alpine',
+    ];
+
+    const collectorModels = [
+      'golf gti', 'bmw m3', '911 turbo', 'type r', 'rs', 'amg', 'quattro'
+    ];
+
+    return collectorBrands.some(b => brand.toLowerCase().includes(b)) ||
+           collectorModels.some(m => model.toLowerCase().includes(m));
+  }
+
+  /**
    * Search for assets across all providers
    */
-  async searchAsset(query: string, type?: 'CRYPTO' | 'STOCK'): Promise<any[]> {
+  async searchAsset(query: string, type?: 'CRYPTO' | 'STOCK' | 'LUXURY_WATCH' | 'COLLECTOR_CAR'): Promise<any[]> {
     const results: any[] = [];
 
     if (!type || type === 'CRYPTO') {
@@ -256,6 +401,20 @@ export class AggregationService {
       if (this.yahooFinance.isEnabled()) {
         const yahooResults = await this.yahooFinance.search(query);
         results.push(...yahooResults.map(r => ({ ...r, type: 'STOCK', provider: 'YAHOO_FINANCE' })));
+      }
+    }
+
+    if (!type || type === 'LUXURY_WATCH') {
+      if (this.watchMarket.isEnabled()) {
+        const watchResults = await this.watchMarket.searchWatch(query);
+        results.push(...watchResults.map(r => ({ ...r, type: 'LUXURY_WATCH', provider: 'WATCH_MARKET' })));
+      }
+    }
+
+    if (!type || type === 'COLLECTOR_CAR') {
+      if (this.carValuation.isEnabled()) {
+        const carResults = await this.carValuation.searchCar(query);
+        results.push(...carResults.map(r => ({ ...r, type: 'COLLECTOR_CAR', provider: 'CAR_VALUATION' })));
       }
     }
 

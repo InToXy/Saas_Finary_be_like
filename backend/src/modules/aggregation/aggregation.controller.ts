@@ -2,6 +2,7 @@ import { Controller, Get, Post, Param, Query, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { AggregationService } from './aggregation.service';
 import { PriceHistoryService } from './providers/price-history.service';
+import { PredictionService } from './providers/prediction.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { BulkUpdateResponseDto, UpdatePriceDto } from './dto/price.dto';
 
@@ -11,6 +12,7 @@ export class AggregationController {
   constructor(
     private readonly aggregationService: AggregationService,
     private readonly priceHistory: PriceHistoryService,
+    private readonly predictionService: PredictionService,
   ) {}
 
   @Post('update/:assetId')
@@ -45,10 +47,10 @@ export class AggregationController {
   @Get('search')
   @ApiOperation({ summary: 'Search for assets across all providers' })
   @ApiQuery({ name: 'query', required: true, description: 'Search query (symbol or name)' })
-  @ApiQuery({ name: 'type', required: false, enum: ['CRYPTO', 'STOCK'], description: 'Asset type filter' })
+  @ApiQuery({ name: 'type', required: false, enum: ['CRYPTO', 'STOCK', 'LUXURY_WATCH', 'COLLECTOR_CAR'], description: 'Asset type filter' })
   async searchAsset(
     @Query('query') query: string,
-    @Query('type') type?: 'CRYPTO' | 'STOCK',
+    @Query('type') type?: 'CRYPTO' | 'STOCK' | 'LUXURY_WATCH' | 'COLLECTOR_CAR',
   ): Promise<any[]> {
     return this.aggregationService.searchAsset(query, type);
   }
@@ -81,5 +83,37 @@ export class AggregationController {
   } | null> {
     // TODO: Verify asset ownership
     return this.priceHistory.getPriceStatistics(assetId, days ? parseInt(days.toString()) : 30);
+  }
+
+  @Post('predict/:assetId')
+  @ApiOperation({ summary: 'Generate price prediction for an asset' })
+  @ApiQuery({ name: 'timeframe', required: false, enum: ['1d', '7d', '30d', '90d'], description: 'Prediction timeframe' })
+  async generatePrediction(
+    @Param('assetId') assetId: string,
+    @Query('timeframe') timeframe: '1d' | '7d' | '30d' | '90d' = '30d',
+    @CurrentUser() user?: any,
+  ): Promise<any> {
+    // TODO: Verify asset ownership
+    return this.predictionService.generatePrediction(assetId, timeframe);
+  }
+
+  @Get('predictions/:assetId')
+  @ApiOperation({ summary: 'Get existing predictions for an asset' })
+  @ApiQuery({ name: 'timeframe', required: false, description: 'Filter by timeframe' })
+  async getAssetPredictions(
+    @Param('assetId') assetId: string,
+    @Query('timeframe') timeframe?: string,
+    @CurrentUser() user?: any,
+  ): Promise<any[]> {
+    // TODO: Verify asset ownership
+    return this.predictionService.getAssetPredictions(assetId, timeframe);
+  }
+
+  @Get('predictions')
+  @ApiOperation({ summary: 'Get all active predictions for current user' })
+  async getUserPredictions(
+    @CurrentUser() user: any,
+  ): Promise<any[]> {
+    return this.predictionService.getActivePredictions(user.id);
   }
 }

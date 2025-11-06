@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Wallet,
   TrendingUp,
+  Bot,
   Receipt,
   Settings,
   LogOut,
@@ -24,8 +25,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   const navigation = [
     { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Portfolio Assets', href: '/assets', icon: TrendingUp },
+    { name: 'Prédictions IA', href: '/predictions', icon: Bot },
     { name: 'Comptes', href: '/accounts', icon: Wallet },
-    { name: 'Actifs', href: '/assets', icon: TrendingUp },
     { name: 'Transactions', href: '/transactions', icon: Receipt },
     { name: 'Paramètres', href: '/settings', icon: Settings },
   ];
@@ -76,7 +78,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200 p-6">
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-primary-600">Wealth Management</h1>
+            <h1 className="text-2xl font-bold text-primary-600">Investment Tracker</h1>
           </div>
           <nav className="flex-1 space-y-2">
             {navigation.map((item) => {
