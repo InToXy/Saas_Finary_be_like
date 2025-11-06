@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MainLayout } from '../components/layouts/MainLayout';
+import MainLayout from '../components/layouts/MainLayout';
 import { Calendar, TrendingUp, DollarSign, Repeat, Edit2, Trash2, Plus } from 'lucide-react';
 
 interface RecurringInvestment {
