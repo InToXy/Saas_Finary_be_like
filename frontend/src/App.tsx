@@ -10,6 +10,7 @@ import AssetsPage from './pages/AssetsPage';
 import PredictionsPage from './pages/PredictionsPage';
 import TransactionsPage from './pages/TransactionsPage';
 import SettingsPage from './pages/SettingsPage';
+import { RecurringInvestmentsPage } from './pages/RecurringInvestmentsPage';
 
 // Layouts
 import AuthLayout from './components/layouts/AuthLayout';
@@ -99,6 +100,16 @@ function App() {
           <ProtectedRoute>
             <MainLayout>
               <TransactionsPage />
+            </MainLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/recurring-investments"
+        element={
+          <ProtectedRoute>
+            <MainLayout>
+              <RecurringInvestmentsPage />
             </MainLayout>
           </ProtectedRoute>
         }
