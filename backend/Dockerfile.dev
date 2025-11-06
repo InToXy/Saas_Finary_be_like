@@ -14,8 +14,12 @@ COPY prisma ./prisma/
 # Install dependencies
 RUN npm install
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Expose port
 EXPOSE 3000
 
-# Start development server
-CMD ["sh", "-c", "npx prisma generate && npm run start:dev"]
+# Use entrypoint script
+ENTRYPOINT ["docker-entrypoint.sh"]
