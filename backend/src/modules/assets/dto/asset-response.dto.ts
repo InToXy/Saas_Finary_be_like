@@ -1,4 +1,4 @@
-import { AssetType } from '@prisma/client';
+import { AssetType } from '../../../types/prisma-types';
 
 export class AssetResponseDto {
   id: string;
