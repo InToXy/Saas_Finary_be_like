@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   X,
+  Repeat,
 } from 'lucide-react';
 
 interface MainLayoutProps {
@@ -27,6 +28,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
     { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Portfolio Assets', href: '/assets', icon: TrendingUp },
     { name: 'Prédictions IA', href: '/predictions', icon: Bot },
+    { name: 'Investissements programmés', href: '/recurring-investments', icon: Repeat },
     { name: 'Comptes', href: '/accounts', icon: Wallet },
     { name: 'Transactions', href: '/transactions', icon: Receipt },
     { name: 'Paramètres', href: '/settings', icon: Settings },

@@ -17,6 +17,7 @@ interface AssetFormData {
   quantity: number;
   purchasePrice: number;
   purchaseDate: string;
+  monthlyInvestment?: number;
   notes?: string;
 }
 
@@ -265,6 +266,27 @@ export function AddAssetModal({ isOpen, onClose }: AddAssetModalProps) {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
+
+              {/* Monthly Investment (for stocks/ETF/crypto/commodity) */}
+              {(formData.type === 'STOCK' || formData.type === 'ETF' || formData.type === 'CRYPTO' || formData.type === 'COMMODITY') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Investissement mensuel (€) - Optionnel
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.monthlyInvestment || ''}
+                    onChange={(e) => setFormData({ ...formData, monthlyInvestment: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="Montant à investir chaque mois"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    💡 Configurez un investissement récurrent pour du DCA (Dollar Cost Averaging)
+                  </p>
+                </div>
+              )}
 
               {/* Image Upload (for watches/cars) */}
               {(formData.type === 'LUXURY_WATCH' || formData.type === 'COLLECTOR_CAR') && (

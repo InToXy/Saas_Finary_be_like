@@ -108,6 +108,7 @@ model Asset {
   quantity         Float             @default(1)
   purchasePrice    Float
   purchaseDate     DateTime?
+  monthlyInvestment Float?
   currentPrice     Float
   currency         String            @default("EUR")
   totalValue       Float
