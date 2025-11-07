@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Repeat,
+  Search,
 } from 'lucide-react';
 
 interface MainLayoutProps {
@@ -27,6 +28,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const navigation = [
     { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Portfolio Assets', href: '/assets', icon: TrendingUp },
+    { name: 'Recherche Actions & ETFs', href: '/search', icon: Search },
     { name: 'Prédictions IA', href: '/predictions', icon: Bot },
     { name: 'Investissements programmés', href: '/recurring-investments', icon: Repeat },
     { name: 'Comptes', href: '/accounts', icon: Wallet },

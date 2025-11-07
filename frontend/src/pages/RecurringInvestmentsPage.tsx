@@ -1,62 +1,10 @@
-import { useState } from 'react';
-import MainLayout from '../components/layouts/MainLayout';
 import { Calendar, TrendingUp, DollarSign, Repeat, Edit2, Trash2, Plus } from 'lucide-react';
-
-interface RecurringInvestment {
-  id: string;
-  assetName: string;
-  assetType: string;
-  symbol?: string;
-  monthlyAmount: number;
-  currentPrice: number;
-  estimatedShares: number;
-  nextInvestmentDate: string;
-  totalInvested: number;
-  isActive: boolean;
-}
+import { useInvestmentsStore } from '../stores/investmentsStore';
 
 export function RecurringInvestmentsPage() {
-  // Mock data - à remplacer par des appels API
-  const [investments] = useState<RecurringInvestment[]>([
-    {
-      id: '1',
-      assetName: 'Apple Inc.',
-      assetType: 'STOCK',
-      symbol: 'AAPL',
-      monthlyAmount: 500,
-      currentPrice: 178.50,
-      estimatedShares: 2.8,
-      nextInvestmentDate: '2025-12-01',
-      totalInvested: 6000,
-      isActive: true,
-    },
-    {
-      id: '2',
-      assetName: 'Vanguard S&P 500 ETF',
-      assetType: 'ETF',
-      symbol: 'VOO',
-      monthlyAmount: 300,
-      currentPrice: 425.30,
-      estimatedShares: 0.7,
-      nextInvestmentDate: '2025-12-01',
-      totalInvested: 3600,
-      isActive: true,
-    },
-    {
-      id: '3',
-      assetName: 'Bitcoin',
-      assetType: 'CRYPTO',
-      symbol: 'BTC',
-      monthlyAmount: 200,
-      currentPrice: 43250.00,
-      estimatedShares: 0.0046,
-      nextInvestmentDate: '2025-12-01',
-      totalInvested: 2400,
-      isActive: true,
-    },
-  ]);
+  const { investments, toggleInvestmentStatus, removeInvestment } = useInvestmentsStore();
 
-  const totalMonthlyInvestment = investments.reduce((sum, inv) => sum + inv.monthlyAmount, 0);
+  const totalMonthlyInvestment = investments.filter(inv => inv.isActive).reduce((sum, inv) => sum + inv.monthlyAmount, 0);
   const totalInvested = investments.reduce((sum, inv) => sum + inv.totalInvested, 0);
   const activeInvestments = investments.filter((inv) => inv.isActive).length;
 
@@ -76,8 +24,7 @@ export function RecurringInvestmentsPage() {
   };
 
   return (
-    <MainLayout>
-      <div className="space-y-6">
+    <div className="space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
@@ -253,6 +200,18 @@ export function RecurringInvestmentsPage() {
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
+                          onClick={() => toggleInvestmentStatus(investment.id)}
+                          className={`${investment.isActive ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'}`}
+                          title={investment.isActive ? 'Suspendre' : 'Activer'}
+                        >
+                          <Repeat className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Êtes-vous sûr de vouloir supprimer l'investissement programmé pour ${investment.assetName} ?`)) {
+                              removeInvestment(investment.id);
+                            }
+                          }}
                           className="text-red-600 hover:text-red-900"
                           title="Supprimer"
                         >
@@ -279,6 +238,5 @@ export function RecurringInvestmentsPage() {
           </p>
         </div>
       </div>
-    </MainLayout>
   );
 }

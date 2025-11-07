@@ -23,7 +23,7 @@ export default function PredictionsPage() {
   const [selectedTimeframe, setSelectedTimeframe] = useState('30d');
   const [selectedAssetType, setSelectedAssetType] = useState('ALL');
   
-  const [predictions] = useState<Prediction[]>([
+  const [predictions] = useState<Prediction[]>([ // TODO: Charger depuis l'API backend
     {
       id: '1',
       assetId: 'btc-1',

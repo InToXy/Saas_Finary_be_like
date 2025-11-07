@@ -55,6 +55,16 @@ export class AggregationController {
     return this.aggregationService.searchAsset(query, type);
   }
 
+  @Get('price/:symbol')
+  @ApiOperation({ summary: 'Get current price for a specific symbol' })
+  @ApiQuery({ name: 'type', required: false, enum: ['CRYPTO', 'STOCK', 'ETF'], description: 'Asset type' })
+  async getCurrentPrice(
+    @Param('symbol') symbol: string,
+    @Query('type') type?: 'CRYPTO' | 'STOCK' | 'ETF',
+  ): Promise<{ symbol: string; price: number; currency: string; source: string; lastUpdated: Date } | null> {
+    return this.aggregationService.getCurrentPrice(symbol, type);
+  }
+
   @Get('history/:assetId')
   @ApiOperation({ summary: 'Get price history for an asset' })
   @ApiQuery({ name: 'days', required: false, description: 'Number of days (default: 30)' })

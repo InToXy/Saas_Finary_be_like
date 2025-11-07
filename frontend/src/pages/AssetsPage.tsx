@@ -1,131 +1,51 @@
-import { useState } from 'react';
-import { Plus, Filter, Search, TrendingUp, TrendingDown, Bot, Image, Eye } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Filter, Search, TrendingUp, TrendingDown, Bot, Image, Eye, Edit, Trash2, Repeat } from 'lucide-react';
 import { AddAssetModal } from '../components/modals/AddAssetModal';
-
-interface Asset {
-  id: string;
-  name: string;
-  type: 'STOCK' | 'CRYPTO' | 'LUXURY_WATCH' | 'COLLECTOR_CAR' | 'COMMODITY' | 'ETF';
-  symbol?: string;
-  brand?: string;
-  model?: string;
-  year?: number;
-  condition?: string;
-  quantity: number;
-  purchasePrice: number;
-  currentPrice: number;
-  totalValue: number;
-  gain: number;
-  gainPercent: number;
-  lastUpdate: string;
-  hasImages?: boolean;
-  hasPrediction?: boolean;
-  predictionChange?: number;
-}
+import { SimpleModal } from '../components/modals/SimpleModal';
+import { EditAssetModal } from '../components/modals/EditAssetModal';
+import { DeleteAssetModal } from '../components/modals/DeleteAssetModal';
+import { useAssetsStore, type Asset } from '../stores/assetsStore';
+import { useInvestmentsStore } from '../stores/investmentsStore';
 
 export default function AssetsPage() {
   const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [assets] = useState<Asset[]>([
-    {
-      id: '1',
-      name: 'Bitcoin',
-      type: 'CRYPTO',
-      symbol: 'BTC',
-      quantity: 0.25,
-      purchasePrice: 45000,
-      currentPrice: 89234,
-      totalValue: 22308.5,
-      gain: 11058.5,
-      gainPercent: 98.3,
-      lastUpdate: '2025-11-06T15:30:00Z',
-      hasPrediction: true,
-      predictionChange: 18.3
-    },
-    {
-      id: '2',
-      name: 'Rolex Submariner',
-      type: 'LUXURY_WATCH',
-      brand: 'Rolex',
-      model: 'Submariner Date',
-      year: 2020,
-      condition: 'Excellent',
-      quantity: 1,
-      purchasePrice: 10500,
-      currentPrice: 12500,
-      totalValue: 12500,
-      gain: 2000,
-      gainPercent: 19.0,
-      lastUpdate: '2025-11-06T14:00:00Z',
-      hasImages: true,
-      hasPrediction: true,
-      predictionChange: 10.0
-    },
-    {
-      id: '3',
-      name: 'Tesla Inc.',
-      type: 'STOCK',
-      symbol: 'TSLA',
-      quantity: 25,
-      purchasePrice: 220.50,
-      currentPrice: 248.50,
-      totalValue: 6212.5,
-      gain: 700,
-      gainPercent: 12.7,
-      lastUpdate: '2025-11-06T15:35:00Z',
-      hasPrediction: true,
-      predictionChange: 14.8
-    },
-    {
-      id: '4',
-      name: 'Porsche 911 Turbo',
-      type: 'COLLECTOR_CAR',
-      brand: 'Porsche',
-      model: '911 Turbo',
-      year: 1995,
-      condition: 'Bon',
-      quantity: 1,
-      purchasePrice: 75000,
-      currentPrice: 87500,
-      totalValue: 87500,
-      gain: 12500,
-      gainPercent: 16.7,
-      lastUpdate: '2025-11-06T12:00:00Z',
-      hasImages: true,
-      hasPrediction: true,
-      predictionChange: 7.7
-    },
-    {
-      id: '5',
-      name: 'Ethereum',
-      type: 'CRYPTO',
-      symbol: 'ETH',
-      quantity: 5.2,
-      purchasePrice: 2800,
-      currentPrice: 3240,
-      totalValue: 16848,
-      gain: 2288,
-      gainPercent: 15.7,
-      lastUpdate: '2025-11-06T15:30:00Z',
-      hasPrediction: true,
-      predictionChange: 8.5
-    },
-    {
-      id: '6',
-      name: 'Or physique',
-      type: 'COMMODITY',
-      symbol: 'GOLD',
-      quantity: 50, // en grammes
-      purchasePrice: 65,
-      currentPrice: 68.5,
-      totalValue: 3425,
-      gain: 175,
-      gainPercent: 5.4,
-      lastUpdate: '2025-11-06T14:15:00Z',
-      hasPrediction: false
-    }
-  ]);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const { assets, fetchAssets, loading } = useAssetsStore();
+  const { investments } = useInvestmentsStore();
+
+  // Charger les assets au démarrage
+  useEffect(() => {
+    fetchAssets();
+  }, [fetchAssets]);
+
+  const handleEditAsset = (asset: Asset) => {
+    setSelectedAsset(asset);
+    setIsEditModalOpen(true);
+  };
+
+  const handleDeleteAsset = (asset: Asset) => {
+    setSelectedAsset(asset);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setSelectedAsset(null);
+  };
+
+  const handleCloseDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setSelectedAsset(null);
+  };
+
+  // Fonction pour obtenir les investissements liés à un asset
+  const getAssetInvestments = (assetId: string) => {
+    return investments.filter(inv => inv.assetId === assetId && inv.isActive);
+  };
 
   const assetTypes = [
     { key: 'ALL', label: 'Tous les assets', count: assets.length },
@@ -171,6 +91,14 @@ export default function AssetsPage() {
     return asset.symbol || asset.type;
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -182,7 +110,12 @@ export default function AssetsPage() {
           </p>
         </div>
         <button 
-          onClick={() => setIsAddModalOpen(true)}
+          onClick={() => {
+            console.log('🔘 Bouton "Ajouter un asset" cliqué');
+            console.log('🔘 État actuel isAddModalOpen:', isAddModalOpen);
+            setIsAddModalOpen(true);
+            console.log('🔘 setIsAddModalOpen(true) appelé');
+          }}
           className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-5 h-5" />
@@ -252,34 +185,70 @@ export default function AssetsPage() {
       {/* Assets Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {filteredAssets.map((asset) => (
-          <div key={asset.id} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <span className="text-2xl">{getAssetTypeIcon(asset.type)}</span>
-                <div>
-                  <h3 className="font-semibold text-gray-900">{formatAssetName(asset)}</h3>
-                  <p className="text-sm text-gray-500">{formatAssetSubtitle(asset)}</p>
+          <div key={asset.id} className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow overflow-hidden">
+            {/* Image Section */}
+            {asset.images && asset.images.length > 0 && (
+              <div className="relative h-48 bg-gray-200">
+                <img
+                  src={asset.images[0]}
+                  alt={formatAssetName(asset)}
+                  className="w-full h-full object-cover"
+                />
+                {asset.images.length > 1 && (
+                  <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+                    +{asset.images.length - 1}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            <div className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <span className="text-2xl">{getAssetTypeIcon(asset.type)}</span>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{formatAssetName(asset)}</h3>
+                    <p className="text-sm text-gray-500">{formatAssetSubtitle(asset)}</p>
+                  </div>
+                </div>
+              
+                <div className="flex items-center space-x-2">
+                  {asset.hasImages && (
+                    <div className="p-1 bg-blue-100 rounded" title="Images disponibles">
+                      <Image className="w-4 h-4 text-blue-600" />
+                    </div>
+                  )}
+                  {asset.hasPrediction && (
+                    <div className="p-1 bg-purple-100 rounded" title="Prédictions IA">
+                      <Bot className="w-4 h-4 text-purple-600" />
+                    </div>
+                  )}
+                  {getAssetInvestments(asset.id).length > 0 && (
+                    <div className="p-1 bg-green-100 rounded" title="Investissement programmé (DCA)">
+                      <Repeat className="w-4 h-4 text-green-600" />
+                    </div>
+                  )}
+                  <button 
+                    onClick={() => handleEditAsset(asset)}
+                    className="p-1 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
+                    title="Modifier"
+                  >
+                    <Edit className="w-4 h-4 text-gray-600" />
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteAsset(asset)}
+                    className="p-1 bg-red-100 rounded hover:bg-red-200 transition-colors"
+                    title="Supprimer"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                  </button>
+                  <button className="p-1 bg-gray-100 rounded hover:bg-gray-200 transition-colors" title="Détails">
+                    <Eye className="w-4 h-4 text-gray-600" />
+                  </button>
                 </div>
               </div>
-              
-              <div className="flex items-center space-x-2">
-                {asset.hasImages && (
-                  <div className="p-1 bg-blue-100 rounded">
-                    <Image className="w-4 h-4 text-blue-600" />
-                  </div>
-                )}
-                {asset.hasPrediction && (
-                  <div className="p-1 bg-purple-100 rounded">
-                    <Bot className="w-4 h-4 text-purple-600" />
-                  </div>
-                )}
-                <button className="p-1 bg-gray-100 rounded hover:bg-gray-200 transition-colors">
-                  <Eye className="w-4 h-4 text-gray-600" />
-                </button>
-              </div>
-            </div>
 
-            <div className="space-y-3">
+              <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Quantité</span>
                 <span className="font-medium">
@@ -327,6 +296,23 @@ export default function AssetsPage() {
                     </span>
                   </div>
                 )}
+                
+                {/* Informations DCA */}
+                {(() => {
+                  const assetInvestments = getAssetInvestments(asset.id);
+                  return assetInvestments.length > 0 && (
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-sm text-green-600 flex items-center">
+                        <Repeat className="w-3 h-3 mr-1" />
+                        DCA Actif
+                      </span>
+                      <span className="text-sm font-medium text-green-600">
+                        {assetInvestments.reduce((sum, inv) => sum + inv.monthlyAmount, 0)}€/mois
+                      </span>
+                    </div>
+                  );
+                })()}
+                </div>
               </div>
             </div>
           </div>
@@ -354,9 +340,29 @@ export default function AssetsPage() {
       )}
 
       {/* Add Asset Modal */}
+      {console.log('🔄 Rendu du modal, isAddModalOpen:', isAddModalOpen)}
       <AddAssetModal 
         isOpen={isAddModalOpen} 
-        onClose={() => setIsAddModalOpen(false)} 
+        onClose={() => {
+          console.log('🚪 Modal fermé via onClose');
+          setIsAddModalOpen(false);
+        }} 
+      />
+      
+      {/* Edit Asset Modal */}
+      {selectedAsset && (
+        <EditAssetModal 
+          isOpen={isEditModalOpen} 
+          onClose={handleCloseEditModal}
+          asset={selectedAsset}
+        />
+      )}
+      
+      {/* Delete Asset Modal */}
+      <DeleteAssetModal 
+        isOpen={isDeleteModalOpen} 
+        onClose={handleCloseDeleteModal}
+        asset={selectedAsset}
       />
     </div>
   );

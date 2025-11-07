@@ -9,6 +9,7 @@ import { YahooFinanceService } from './providers/yahoo-finance.service';
 import { WatchMarketService } from './providers/watch-market.service';
 import { CarValuationService } from './providers/car-valuation.service';
 import { PriceHistoryService } from './providers/price-history.service';
+import { FallbackSearchService } from './providers/fallback-search.service';
 import { PriceDataDto, BulkUpdateResponseDto } from './dto/price.dto';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class AggregationService {
     private readonly watchMarket: WatchMarketService,
     private readonly carValuation: CarValuationService,
     private readonly priceHistory: PriceHistoryService,
+    private readonly fallbackSearch: FallbackSearchService,
   ) {
     this.priceUpdatesEnabled = this.configService.get<boolean>('ENABLE_PRICE_UPDATES') !== false;
   }
@@ -384,23 +386,53 @@ export class AggregationService {
   /**
    * Search for assets across all providers
    */
-  async searchAsset(query: string, type?: 'CRYPTO' | 'STOCK' | 'LUXURY_WATCH' | 'COLLECTOR_CAR'): Promise<any[]> {
+  async searchAsset(query: string, type?: 'CRYPTO' | 'STOCK' | 'ETF' | 'LUXURY_WATCH' | 'COLLECTOR_CAR'): Promise<any[]> {
     const results: any[] = [];
 
     if (!type || type === 'CRYPTO') {
-      const cryptoResults = await this.coinGecko.searchCoin(query);
-      results.push(...cryptoResults.map(r => ({ ...r, type: 'CRYPTO', provider: 'COINGECKO' })));
+      try {
+        const cryptoResults = await this.coinGecko.searchCoin(query);
+        results.push(...cryptoResults.map(r => ({ ...r, type: 'CRYPTO', provider: 'COINGECKO' })));
+      } catch (error) {
+        this.logger.warn('CoinGecko search failed, using fallback');
+        const fallbackResults = this.fallbackSearch.search(query, 'CRYPTO');
+        results.push(...fallbackResults.map(r => ({ ...r, provider: 'FALLBACK' })));
+      }
     }
 
-    if (!type || type === 'STOCK') {
+    if (!type || type === 'STOCK' || type === 'ETF') {
+      // Try Alpha Vantage first
       if (this.alphaVantage.isEnabled()) {
-        const stockResults = await this.alphaVantage.search(query);
-        results.push(...stockResults.map(r => ({ ...r, type: 'STOCK', provider: 'ALPHA_VANTAGE' })));
+        try {
+          const stockResults = await this.alphaVantage.search(query);
+          results.push(...stockResults.map(r => ({ ...r, type: 'STOCK', provider: 'ALPHA_VANTAGE' })));
+        } catch (error) {
+          this.logger.warn('Alpha Vantage search failed');
+        }
       }
 
-      if (this.yahooFinance.isEnabled()) {
-        const yahooResults = await this.yahooFinance.search(query);
-        results.push(...yahooResults.map(r => ({ ...r, type: 'STOCK', provider: 'YAHOO_FINANCE' })));
+      // Yahoo Finance temporarily disabled due to v3 compatibility issues
+      // TODO: Fix Yahoo Finance initialization for v3+
+      if (false && this.yahooFinance.isEnabled()) {
+        try {
+          const yahooResults = await this.yahooFinance.search(query);
+          results.push(...yahooResults.map(r => ({ ...r, type: 'STOCK', provider: 'YAHOO_FINANCE' })));
+        } catch (error) {
+          this.logger.warn('Yahoo Finance search failed, skipping');
+        }
+      }
+
+      // Always try fallback search for stocks and ETFs
+      if (results.length === 0 || !this.alphaVantage.isEnabled()) {
+        this.logger.log('Using fallback search for stocks/ETFs');
+        const fallbackStocks = this.fallbackSearch.search(query, type === 'ETF' ? 'ETF' : 'STOCK');
+        results.push(...fallbackStocks.map(r => ({ ...r, provider: 'FALLBACK' })));
+        
+        // If searching for both or no specific type, also search ETFs
+        if (!type || type === 'ETF') {
+          const fallbackETFs = this.fallbackSearch.search(query, 'ETF');
+          results.push(...fallbackETFs.map(r => ({ ...r, provider: 'FALLBACK' })));
+        }
       }
     }
 
@@ -418,7 +450,55 @@ export class AggregationService {
       }
     }
 
+    this.logger.log(`Search for "${query}" (type: ${type}): found ${results.length} results`);
     return results;
+  }
+
+  /**
+   * Get current price for a specific symbol
+   */
+  async getCurrentPrice(symbol: string, type?: 'CRYPTO' | 'STOCK' | 'ETF'): Promise<{ symbol: string; price: number; currency: string; source: string; lastUpdated: Date } | null> {
+    try {
+      this.logger.log(`Fetching current price for symbol: ${symbol}, type: ${type}`);
+
+      // Determine asset type if not provided
+      const assetType = type || (symbol.match(/^[A-Z]{1,5}$/) ? 'STOCK' : 'CRYPTO');
+
+      switch (assetType) {
+        case 'CRYPTO':
+          const cryptoPrice = await this.fetchCryptoPrice(symbol, 'USD');
+          if (cryptoPrice) {
+            return {
+              symbol,
+              price: cryptoPrice.price,
+              currency: cryptoPrice.currency,
+              source: cryptoPrice.source,
+              lastUpdated: cryptoPrice.timestamp,
+            };
+          }
+          break;
+
+        case 'STOCK':
+        case 'ETF':
+          const stockPrice = await this.fetchStockPrice(symbol);
+          if (stockPrice) {
+            return {
+              symbol,
+              price: stockPrice.price,
+              currency: stockPrice.currency,
+              source: stockPrice.source,
+              lastUpdated: stockPrice.timestamp,
+            };
+          }
+          break;
+      }
+
+      this.logger.warn(`No price found for symbol: ${symbol}`);
+      return null;
+    } catch (error: any) {
+      this.logger.error(`Failed to get current price for ${symbol}: ${error.message}`);
+      return null;
+    }
   }
 
   /**

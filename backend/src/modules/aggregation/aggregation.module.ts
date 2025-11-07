@@ -9,6 +9,7 @@ import { WatchMarketService } from './providers/watch-market.service';
 import { CarValuationService } from './providers/car-valuation.service';
 import { PredictionService } from './providers/prediction.service';
 import { PriceHistoryService } from './providers/price-history.service';
+import { FallbackSearchService } from './providers/fallback-search.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 
 @Module({
@@ -24,6 +25,7 @@ import { PrismaModule } from '../../common/prisma/prisma.module';
     CarValuationService,
     PredictionService,
     PriceHistoryService,
+    FallbackSearchService,
   ],
   exports: [
     AggregationService, 

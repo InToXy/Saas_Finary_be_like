@@ -1,27 +1,48 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import yahooFinance from 'yahoo-finance2';
 import { StockPriceDto } from '../dto/price.dto';
 
 @Injectable()
 export class YahooFinanceService {
   private readonly logger = new Logger(YahooFinanceService.name);
   private readonly enabled: boolean;
+  private yahooFinance: any;
 
   constructor(private readonly configService: ConfigService) {
     this.enabled = this.configService.get<boolean>('YAHOO_FINANCE_ENABLED') !== false;
+    
+    if (this.enabled) {
+      try {
+        // Dynamically import yahoo-finance2 to handle v3+ initialization
+        this.initializeYahooFinance();
+      } catch (error) {
+        this.logger.error('Failed to initialize Yahoo Finance service:', error);
+        this.enabled = false;
+      }
+    }
+  }
+
+  private async initializeYahooFinance() {
+    try {
+      // For yahoo-finance2 v3+, we need to use dynamic import
+      const { default: yahooFinance } = await import('yahoo-finance2');
+      this.yahooFinance = yahooFinance;
+    } catch (error) {
+      this.logger.error('Failed to import yahoo-finance2:', error);
+      throw error;
+    }
   }
 
   /**
    * Get current price for a stock/ETF
    */
   async getPrice(symbol: string): Promise<StockPriceDto | null> {
-    if (!this.enabled) {
+    if (!this.enabled || !this.yahooFinance) {
       return null;
     }
 
     try {
-      const quote: any = await yahooFinance.quote(symbol);
+      const quote: any = await this.yahooFinance.quote(symbol);
 
       if (!quote) {
         this.logger.warn(`No data found for symbol: ${symbol}`);
@@ -71,12 +92,12 @@ export class YahooFinanceService {
    * Get simple price (faster)
    */
   async getSimplePrice(symbol: string): Promise<number | null> {
-    if (!this.enabled) {
+    if (!this.enabled || !this.yahooFinance) {
       return null;
     }
 
     try {
-      const quote: any = await yahooFinance.quote(symbol);
+      const quote: any = await this.yahooFinance.quote(symbol);
       return quote?.regularMarketPrice || null;
     } catch (error: any) {
       this.logger.error(`Failed to fetch simple price for ${symbol}: ${error.message}`);
@@ -93,12 +114,12 @@ export class YahooFinanceService {
     period2: Date = new Date(),
     interval: '1d' | '1wk' | '1mo' = '1d',
   ): Promise<Array<{ date: Date; open: number; high: number; low: number; close: number; volume: number }>> {
-    if (!this.enabled) {
+    if (!this.enabled || !this.yahooFinance) {
       return [];
     }
 
     try {
-      const result: any = await yahooFinance.historical(symbol, {
+      const result: any = await this.yahooFinance.historical(symbol, {
         period1,
         period2,
         interval,
@@ -122,12 +143,12 @@ export class YahooFinanceService {
    * Search for stocks/ETFs
    */
   async search(query: string): Promise<Array<{ symbol: string; name: string; type: string }>> {
-    if (!this.enabled) {
+    if (!this.enabled || !this.yahooFinance) {
       return [];
     }
 
     try {
-      const results: any = await yahooFinance.search(query);
+      const results: any = await this.yahooFinance.search(query);
 
       return results.quotes.slice(0, 10).map((quote: any) => ({
         symbol: quote.symbol,
@@ -144,12 +165,12 @@ export class YahooFinanceService {
    * Get quote summary (fundamental data)
    */
   async getQuoteSummary(symbol: string): Promise<any> {
-    if (!this.enabled) {
+    if (!this.enabled || !this.yahooFinance) {
       return null;
     }
 
     try {
-      const result = await yahooFinance.quoteSummary(symbol, {
+      const result = await this.yahooFinance.quoteSummary(symbol, {
         modules: ['price', 'summaryDetail', 'assetProfile'],
       });
 
@@ -164,6 +185,6 @@ export class YahooFinanceService {
    * Check if service is enabled
    */
   isEnabled(): boolean {
-    return this.enabled;
+    return this.enabled && !!this.yahooFinance;
   }
 }

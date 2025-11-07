@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, Bot, Target, Zap, Watch, Car, TrendingDown } from 'lucide-react';
+import { TrendingUp, Bot, Target, Zap, Watch, Car } from 'lucide-react';
 import { AssetTypeChart } from '../components/charts/AssetTypeChart';
 import { PredictionCard } from '../components/cards/PredictionCard';
 import { AssetCard } from '../components/cards/AssetCard';
+import { useAssetsStore } from '../stores/assetsStore';
+import { useInvestmentsStore } from '../stores/investmentsStore';
 
 interface DashboardStats {
   totalValue: number;
@@ -38,6 +40,9 @@ interface Prediction {
 }
 
 export default function DashboardPage() {
+  const { assets, fetchAssets, loading: assetsLoading } = useAssetsStore();
+  const { investments } = useInvestmentsStore();
+  
   const [stats, setStats] = useState<DashboardStats>({
     totalValue: 0,
     monthlyGain: 0,
@@ -51,128 +56,93 @@ export default function DashboardPage() {
   const [topPredictions, setTopPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Mock data - À remplacer par API calls
+  // Charger les données au démarrage
   useEffect(() => {
-    // Simuler un appel API
-    setTimeout(() => {
-      setStats({
-        totalValue: 324750,
-        monthlyGain: 15420,
-        activePredictions: 18,
-        averageConfidence: 73.5,
-        assetsTracked: 45,
-        marketTrend: 'up'
-      });
-
-      setAssetTypes([
-        {
-          type: 'STOCK',
-          name: 'Actions',
-          value: 125340,
-          percentage: 38.6,
-          change: 8.2,
-          count: 12,
-          icon: TrendingUp,
-          color: 'bg-blue-500'
-        },
-        {
-          type: 'CRYPTO',
-          name: 'Crypto',
-          value: 89230,
-          percentage: 27.5,
-          change: 15.6,
-          count: 8,
-          icon: Zap,
-          color: 'bg-purple-500'
-        },
-        {
-          type: 'LUXURY_WATCH',
-          name: 'Montres',
-          value: 67450,
-          percentage: 20.8,
-          change: 12.3,
-          count: 5,
-          icon: Watch,
-          color: 'bg-amber-500'
-        },
-        {
-          type: 'COLLECTOR_CAR',
-          name: 'Voitures',
-          value: 32890,
-          percentage: 10.1,
-          change: 6.7,
-          count: 2,
-          icon: Car,
-          color: 'bg-red-500'
-        },
-        {
-          type: 'COMMODITY',
-          name: 'Matières 1ères',
-          value: 9840,
-          percentage: 3.0,
-          change: -2.1,
-          count: 3,
-          icon: TrendingDown,
-          color: 'bg-green-500'
-        }
-      ]);
-
-      setTopPredictions([
-        {
-          id: '1',
-          assetId: 'btc-1',
-          assetName: 'Bitcoin',
-          assetType: 'CRYPTO',
-          currentPrice: 89234,
-          predictedPrice: 105600,
-          confidence: 84.2,
-          timeframe: '30d',
-          change: 16366,
-          changePercent: 18.3
-        },
-        {
-          id: '2',
-          assetId: 'rolex-1',
-          assetName: 'Rolex Submariner 2020',
-          assetType: 'LUXURY_WATCH',
-          currentPrice: 12500,
-          predictedPrice: 13750,
-          confidence: 76.8,
-          timeframe: '90d',
-          change: 1250,
-          changePercent: 10.0
-        },
-        {
-          id: '3',
-          assetId: 'tsla-1',
-          assetName: 'Tesla Inc.',
-          assetType: 'STOCK',
-          currentPrice: 248.50,
-          predictedPrice: 285.20,
-          confidence: 68.4,
-          timeframe: '30d',
-          change: 36.70,
-          changePercent: 14.8
-        },
-        {
-          id: '4',
-          assetId: 'porsche-1',
-          assetName: 'Porsche 911 Turbo 1995',
-          assetType: 'COLLECTOR_CAR',
-          currentPrice: 87500,
-          predictedPrice: 94200,
-          confidence: 82.1,
-          timeframe: '90d',
-          change: 6700,
-          changePercent: 7.7
-        }
-      ]);
-
+    const loadData = async () => {
+      await fetchAssets();
       setLoading(false);
-    }, 1000);
-  }, []);
+    };
+    loadData();
+  }, [fetchAssets]);
 
-  if (loading) {
+  // Calculer les données en temps réel depuis les stores
+  useEffect(() => {
+    // Calculer les statistiques depuis les assets réels
+    const totalValue = assets.reduce((sum, asset) => sum + asset.totalValue, 0);
+    const totalGain = assets.reduce((sum, asset) => sum + asset.gain, 0);
+    const predictionsCount = assets.filter(asset => asset.hasPrediction).length;
+    
+    setStats({
+      totalValue,
+      monthlyGain: totalGain,
+      activePredictions: predictionsCount,
+      averageConfidence: 73.5,
+      assetsTracked: assets.length,
+      marketTrend: totalGain > 0 ? 'up' : totalGain < 0 ? 'down' : 'neutral'
+    });
+
+    // Calculer la répartition par type d'asset
+    const assetTypeData = assets.reduce((acc, asset) => {
+      const existing = acc.find(item => item.type === asset.type);
+      if (existing) {
+        existing.value += asset.totalValue;
+        existing.count += 1;
+        existing.change = (existing.change + asset.gainPercent) / 2; // Moyenne
+      } else {
+        acc.push({
+          type: asset.type,
+          name: asset.type === 'STOCK' ? 'Actions' :
+                asset.type === 'CRYPTO' ? 'Crypto' :
+                asset.type === 'LUXURY_WATCH' ? 'Montres' :
+                asset.type === 'COLLECTOR_CAR' ? 'Voitures' :
+                asset.type === 'COMMODITY' ? 'Matières 1ères' : 'ETF',
+          value: asset.totalValue,
+          percentage: 0, // Calculé après
+          change: asset.gainPercent,
+          count: 1,
+          icon: asset.type === 'STOCK' ? TrendingUp :
+                asset.type === 'CRYPTO' ? Zap :
+                asset.type === 'LUXURY_WATCH' ? Watch :
+                asset.type === 'COLLECTOR_CAR' ? Car : Target,
+          color: asset.type === 'STOCK' ? 'bg-blue-500' :
+                 asset.type === 'CRYPTO' ? 'bg-purple-500' :
+                 asset.type === 'LUXURY_WATCH' ? 'bg-amber-500' :
+                 asset.type === 'COLLECTOR_CAR' ? 'bg-red-500' : 'bg-green-500'
+        });
+      }
+      return acc;
+    }, [] as AssetType[]);
+    
+    // Calculer les pourcentages
+    assetTypeData.forEach(item => {
+      item.percentage = totalValue > 0 ? (item.value / totalValue) * 100 : 0;
+    });
+    
+    setAssetTypes(assetTypeData);
+
+    // Générer les top prédictions depuis les assets réels
+    const predictionsData = assets
+      .filter(asset => asset.hasPrediction && asset.predictionChange)
+      .sort((a, b) => (b.predictionChange || 0) - (a.predictionChange || 0))
+      .slice(0, 5)
+      .map(asset => ({
+        id: asset.id,
+        assetId: asset.id,
+        assetName: asset.brand && asset.model ? `${asset.brand} ${asset.model}` : asset.name,
+        assetType: asset.type,
+        currentPrice: asset.currentPrice,
+        predictedPrice: asset.currentPrice * (1 + (asset.predictionChange || 0) / 100),
+        confidence: 75 + Math.random() * 20, // Simuler une confiance entre 75% et 95%
+        timeframe: '30d',
+        change: asset.currentPrice * (asset.predictionChange || 0) / 100,
+        changePercent: asset.predictionChange || 0
+      }));
+    
+    setTopPredictions(predictionsData);
+
+  }, [assets, investments]);
+
+  if (loading || assetsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>

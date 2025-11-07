@@ -7,6 +7,7 @@ import RegisterPage from './pages/auth/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import AccountsPage from './pages/AccountsPage';
 import AssetsPage from './pages/AssetsPage';
+import SearchPage from './pages/SearchPage';
 import PredictionsPage from './pages/PredictionsPage';
 import TransactionsPage from './pages/TransactionsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -80,6 +81,16 @@ function App() {
           <ProtectedRoute>
             <MainLayout>
               <AssetsPage />
+            </MainLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/search"
+        element={
+          <ProtectedRoute>
+            <MainLayout>
+              <SearchPage />
             </MainLayout>
           </ProtectedRoute>
         }

@@ -1,5 +1,10 @@
-import { useState } from 'react';
-import { X, Search, Upload } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { X, Search, Upload, Trash2, Wand2, Check } from 'lucide-react';
+import { useAssetsStore } from '../../stores/assetsStore';
+import { useAuthStore } from '../../stores/authStore';
+import { StockSearchMenu } from '../search/StockSearchMenu';
+import { ImageService } from '../../services/imageService';
+import api from '../../services/api';
 
 interface AddAssetModalProps {
   isOpen: boolean;
@@ -16,357 +21,492 @@ interface AssetFormData {
   condition?: string;
   quantity: number;
   purchasePrice: number;
+  currentPrice: number;
   purchaseDate: string;
   monthlyInvestment?: number;
   notes?: string;
 }
 
+interface SearchResult {
+  symbol: string;
+  name: string;
+  type: string;
+  region?: string;
+  currency?: string;
+  provider: string;
+}
+
 export function AddAssetModal({ isOpen, onClose }: AddAssetModalProps) {
-  const [step, setStep] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
+  console.log('🔄 AddAssetModal rendu, props:', { isOpen, onClose: typeof onClose });
+  
+  const { addAsset, assets } = useAssetsStore();
+  const { user, accessToken, isAuthenticated } = useAuthStore();
   const [formData, setFormData] = useState<AssetFormData>({
     type: 'STOCK',
     name: '',
     quantity: 1,
     purchasePrice: 0,
+    currentPrice: 0,
     purchaseDate: new Date().toISOString().split('T')[0]
   });
 
-  if (!isOpen) return null;
+  // State pour le chargement du prix
+  const [loadingPrice, setLoadingPrice] = useState(false);
+  
+  // State pour les images automatiques
+  const [autoImages, setAutoImages] = useState<string[]>([]);
 
-  const assetTypes = [
-    { value: 'STOCK', label: 'Actions', icon: '📈', description: 'Actions individuelles, ETF listés' },
-    { value: 'CRYPTO', label: 'Cryptomonnaies', icon: '₿', description: 'Bitcoin, Ethereum, altcoins' },
-    { value: 'LUXURY_WATCH', label: 'Montres de luxe', icon: '⌚', description: 'Rolex, Patek Philippe, AP...' },
-    { value: 'COLLECTOR_CAR', label: 'Voitures de collection', icon: '🚗', description: 'Voitures classiques et sportives' },
-    { value: 'COMMODITY', label: 'Matières premières', icon: '🏆', description: 'Or, argent, pétrole...' },
-  ];
+  // Debug auth info
+  useEffect(() => {
+    if (isOpen) {
+      console.log('🔐 Auth Debug Info:', {
+        isAuthenticated,
+        hasUser: !!user,
+        hasToken: !!accessToken,
+        userEmail: user?.email,
+        tokenLength: accessToken?.length
+      });
+    }
+  }, [isOpen, isAuthenticated, user, accessToken]);
 
-  const watchConditions = ['Neuve', 'Comme neuve', 'Excellente', 'Très bon état', 'Bon état', 'État correct'];
-  const carConditions = ['Concours', 'Excellente', 'Très bonne', 'Bonne', 'Correcte', 'À restaurer'];
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Adding asset:', formData);
-    onClose();
-    setStep(1);
-    setFormData({
-      type: 'STOCK',
-      name: '',
-      quantity: 1,
-      purchasePrice: 0,
-      purchaseDate: new Date().toISOString().split('T')[0]
-    });
+  // Fonction pour récupérer le prix actuel via l'API
+  const fetchCurrentPrice = async (symbol: string, type: string = 'STOCK') => {
+    if (!symbol) return;
+    
+    setLoadingPrice(true);
+    try {
+      console.log('💰 Récupération du prix pour:', symbol, 'type:', type);
+      
+      // Essayer d'abord l'endpoint de prix dédié
+      const priceResponse = await api.get(`/aggregation/price/${symbol}?type=${type}`);
+      
+      if (priceResponse.data && priceResponse.data.price) {
+        const fetchedPrice = priceResponse.data.price;
+        setFormData(prev => ({ ...prev, currentPrice: fetchedPrice }));
+        console.log('💰 Prix récupéré via API:', fetchedPrice, priceResponse.data.currency);
+        return;
+      }
+    } catch (priceError) {
+      console.warn('⚠️ API prix indisponible pour', symbol);
+      // Afficher une erreur claire à l'utilisateur
+      alert(`⚠️ Service de prix temporairement indisponible pour ${symbol}. Veuillez entrer le prix manuellement.`);
+    } finally {
+      setLoadingPrice(false);
+    }
   };
 
-  const renderStepContent = () => {
-    switch (step) {
-      case 1:
-        return (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Choisissez le type d'asset</h3>
-            <div className="grid grid-cols-1 gap-3">
-              {assetTypes.map((type) => (
-                <button
-                  key={type.value}
-                  onClick={() => {
-                    setFormData({ ...formData, type: type.value as any });
-                    setStep(2);
-                  }}
-                  className="flex items-center space-x-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
-                >
-                  <span className="text-2xl">{type.icon}</span>
-                  <div>
-                    <h4 className="font-medium text-gray-900">{type.label}</h4>
-                    <p className="text-sm text-gray-500">{type.description}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        );
+  // Fonction pour récupérer automatiquement les images
+  const fetchAutoImages = async () => {
+    if ((formData.type === 'LUXURY_WATCH' || formData.type === 'COLLECTOR_CAR') && 
+        formData.brand && formData.model) {
+      try {
+        const images = await ImageService.getAssetImages({
+          type: formData.type,
+          brand: formData.brand,
+          model: formData.model,
+          year: formData.year
+        });
+        
+        const imageUrls = images.map(img => img.url);
+        setAutoImages(imageUrls);
+        if (imageUrls.length > 0) {
+          console.log(`🖼️ ${imageUrls.length} images trouvées pour ${formData.brand} ${formData.model}`);
+        }
+      } catch (error) {
+        console.error('Erreur lors de la récupération des images:', error);
+      }
+    }
+  };
 
-      case 2:
-        return (
-          <div>
-            <div className="flex items-center space-x-2 mb-4">
-              <span className="text-2xl">
-                {assetTypes.find(t => t.value === formData.type)?.icon}
-              </span>
-              <h3 className="text-lg font-semibold text-gray-900">
-                Ajouter {assetTypes.find(t => t.value === formData.type)?.label}
-              </h3>
-            </div>
+  // Déclencher la recherche d'images quand brand/model changent
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (formData.brand && formData.model && (formData.type === 'LUXURY_WATCH' || formData.type === 'COLLECTOR_CAR')) {
+        fetchAutoImages();
+      } else {
+        setAutoImages([]);
+      }
+    }, 500);
+    
+    return () => clearTimeout(timeoutId);
+  }, [formData.brand, formData.model, formData.year, formData.type]);
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Search for existing assets */}
-              {(formData.type === 'STOCK' || formData.type === 'CRYPTO') && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Rechercher
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <input
-                      type="text"
-                      placeholder={formData.type === 'STOCK' ? 'Nom ou symbole (ex: AAPL, Tesla)' : 'Nom de crypto (ex: BTC, Ethereum)'}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-              )}
+  
+  if (!isOpen) {
+    console.log('🚫 Modal fermé, isOpen:', isOpen);
+    return null;
+  }
+  
+  console.log('✅ Modal ouvert, isOpen:', isOpen);
 
-              {/* Asset Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nom de l'asset *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder={
-                    formData.type === 'LUXURY_WATCH' ? 'ex: Rolex Submariner' :
-                    formData.type === 'COLLECTOR_CAR' ? 'ex: Porsche 911 Turbo' :
-                    'Nom de l\'asset'
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+  // Handle selecting a search result
+  const handleSelectSearchResult = (result: SearchResult) => {
+    setFormData(prev => ({
+      ...prev,
+      name: result.name,
+      symbol: result.symbol
+    }));
+    
+    // Récupérer automatiquement le prix actuel
+    if (result.symbol) {
+      fetchCurrentPrice(result.symbol, result.type);
+    }
+  };
 
-              {/* Symbol (for stocks/crypto) */}
-              {(formData.type === 'STOCK' || formData.type === 'CRYPTO' || formData.type === 'COMMODITY') && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Symbole
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.symbol || ''}
-                    onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
-                    placeholder={
-                      formData.type === 'STOCK' ? 'AAPL, TSLA...' :
-                      formData.type === 'CRYPTO' ? 'BTC, ETH...' : 'GOLD, OIL...'
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              )}
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    console.log('🚀 Début du handleSubmit');
+    console.log('📝 FormData:', formData);
+    console.log('🔐 isAuthenticated:', isAuthenticated);
+    console.log('👤 User:', user);
+    console.log('🎫 AccessToken exists:', !!accessToken);
+    
+    // Validation de l'authentification
+    if (!isAuthenticated) {
+      alert('Vous devez être connecté pour ajouter un asset');
+      return;
+    }
+    
+    // Validation simple
+    if (!formData.name || formData.name.trim() === '') {
+      alert('Veuillez entrer un nom pour l\'asset');
+      return;
+    }
+    
+    if (formData.quantity <= 0 || formData.purchasePrice <= 0 || formData.currentPrice <= 0) {
+      alert('La quantité, le prix d\'achat et le prix actuel doivent être supérieurs à zéro');
+      return;
+    }
 
-              {/* Brand and Model (for watches/cars) */}
-              {(formData.type === 'LUXURY_WATCH' || formData.type === 'COLLECTOR_CAR') && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Marque *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.brand || ''}
-                      onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                      placeholder={formData.type === 'LUXURY_WATCH' ? 'Rolex, Patek Philippe...' : 'Porsche, Ferrari...'}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Modèle *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.model || ''}
-                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                      placeholder={formData.type === 'LUXURY_WATCH' ? 'Submariner, Nautilus...' : '911, F40...'}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Year and Condition (for watches/cars) */}
-              {(formData.type === 'LUXURY_WATCH' || formData.type === 'COLLECTOR_CAR') && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Année
-                    </label>
-                    <input
-                      type="number"
-                      min="1900"
-                      max={new Date().getFullYear()}
-                      value={formData.year || ''}
-                      onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      État
-                    </label>
-                    <select
-                      value={formData.condition || ''}
-                      onChange={(e) => setFormData({ ...formData, condition: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Sélectionner...</option>
-                      {(formData.type === 'LUXURY_WATCH' ? watchConditions : carConditions).map(condition => (
-                        <option key={condition} value={condition}>{condition}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* Quantity and Purchase Price */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Quantité *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step={formData.type === 'CRYPTO' ? '0.00001' : '1'}
-                    value={formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Prix d'achat (€) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={formData.purchasePrice}
-                    onChange={(e) => setFormData({ ...formData, purchasePrice: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              {/* Purchase Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date d'achat
-                </label>
-                <input
-                  type="date"
-                  value={formData.purchaseDate}
-                  onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {/* Monthly Investment (for stocks/ETF/crypto/commodity) */}
-              {(formData.type === 'STOCK' || formData.type === 'ETF' || formData.type === 'CRYPTO' || formData.type === 'COMMODITY') && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Investissement mensuel (€) - Optionnel
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.monthlyInvestment || ''}
-                    onChange={(e) => setFormData({ ...formData, monthlyInvestment: e.target.value ? parseFloat(e.target.value) : undefined })}
-                    placeholder="Montant à investir chaque mois"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    💡 Configurez un investissement récurrent pour du DCA (Dollar Cost Averaging)
-                  </p>
-                </div>
-              )}
-
-              {/* Image Upload (for watches/cars) */}
-              {(formData.type === 'LUXURY_WATCH' || formData.type === 'COLLECTOR_CAR') && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Photos (optionnel)
-                  </label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors">
-                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                    <p className="mt-2 text-sm text-gray-600">
-                      Glissez vos photos ici ou cliquez pour sélectionner
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      PNG, JPG jusqu'à 10MB
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Notes (optionnel)
-                </label>
-                <textarea
-                  value={formData.notes || ''}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Informations complémentaires..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                />
-              </div>
-
-              {/* Actions */}
-              <div className="flex space-x-3 pt-6">
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Retour
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Ajouter l'asset
-                </button>
-              </div>
-            </form>
-          </div>
-        );
-
-      default:
-        return null;
+    try {
+      console.log('📤 Appel de addAsset...');
+      
+      // Ajouter les images automatiques aux données
+      const assetDataWithImages = {
+        ...formData,
+        hasImages: autoImages.length > 0,
+        images: autoImages
+      };
+      
+      await addAsset(assetDataWithImages);
+      console.log('✅ Asset ajouté avec succès');
+      onClose();
+      
+      // Reset form
+      setFormData({
+        type: 'STOCK',
+        name: '',
+        quantity: 1,
+        purchasePrice: 0,
+        currentPrice: 0,
+        purchaseDate: new Date().toISOString().split('T')[0]
+      });
+      setAutoImages([]);
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'ajout:', error);
+      console.error('❌ Type d\'erreur:', typeof error);
+      console.error('❌ Message:', error?.message);
+      console.error('❌ Stack:', error?.stack);
+      alert('Erreur lors de l\'ajout de l\'asset. Consultez la console pour plus de détails.');
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={onClose} />
-        
-        <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">
-              {step === 1 ? 'Nouvel Asset' : 'Informations Asset'}
-            </h2>
-            <button
-              onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">Ajouter un Asset</h2>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Type d'asset */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Type d'asset
+            </label>
+            <select
+              value={formData.type}
+              onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as any }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <X className="w-5 h-5" />
+              <option value="STOCK">📈 Actions</option>
+              <option value="CRYPTO">₿ Cryptomonnaies</option>
+              <option value="LUXURY_WATCH">⌚ Montres de luxe</option>
+              <option value="COLLECTOR_CAR">🚗 Voitures de collection</option>
+              <option value="COMMODITY">🏆 Matières premières</option>
+              <option value="ETF">📊 ETF</option>
+            </select>
+          </div>
+
+          {/* Search & Nom */}
+          {(formData.type === 'STOCK' || formData.type === 'ETF' || formData.type === 'CRYPTO') ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Rechercher {formData.type === 'STOCK' ? 'une action' : formData.type === 'ETF' ? 'un ETF' : 'une cryptomonnaie'}
+              </label>
+              <StockSearchMenu
+                onSelect={handleSelectSearchResult}
+                placeholder={`Rechercher ${formData.type === 'STOCK' ? 'une action' : formData.type === 'ETF' ? 'un ETF' : 'une cryptomonnaie'}...`}
+                className="w-full"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nom de l'asset
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Ex: Rolex Submariner, Ferrari 250 GT..."
+                required
+              />
+            </div>
+          )}
+
+          {/* Manual name input for selected assets */}
+          {(formData.type === 'STOCK' || formData.type === 'ETF' || formData.type === 'CRYPTO') && formData.name && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Asset sélectionné
+              </label>
+              <div className="px-3 py-2 bg-green-50 border border-green-200 rounded-lg flex items-center space-x-2">
+                <Check className="w-4 h-4 text-green-600" />
+                <span className="text-green-800">{formData.name} ({formData.symbol})</span>
+              </div>
+            </div>
+          )}
+
+          {/* Brand and Model (for watches/cars) */}
+          {(formData.type === 'LUXURY_WATCH' || formData.type === 'COLLECTOR_CAR') && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Marque *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.brand || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, brand: e.target.value }))}
+                    placeholder={formData.type === 'LUXURY_WATCH' ? 'Rolex, Patek Philippe...' : 'Porsche, Ferrari...'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Modèle *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.model || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, model: e.target.value }))}
+                    placeholder={formData.type === 'LUXURY_WATCH' ? 'Submariner, Nautilus...' : '911, F40...'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Year and Condition */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Année
+                  </label>
+                  <input
+                    type="number"
+                    min="1900"
+                    max={new Date().getFullYear()}
+                    value={formData.year || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, year: parseInt(e.target.value) || undefined }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    État
+                  </label>
+                  <select
+                    value={formData.condition || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, condition: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Sélectionner...</option>
+                    {(formData.type === 'LUXURY_WATCH' ? 
+                      ['Neuve', 'Comme neuve', 'Excellente', 'Très bon état', 'Bon état', 'État correct'] : 
+                      ['Concours', 'Excellente', 'Très bonne', 'Bonne', 'Correcte', 'À restaurer']
+                    ).map(condition => (
+                      <option key={condition} value={condition}>{condition}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Images automatiques */}
+              {autoImages.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Images trouvées automatiquement
+                  </label>
+                  <p className="text-sm text-green-600 mb-3 flex items-center">
+                    <Wand2 className="w-4 h-4 mr-1" />
+                    {autoImages.length} images trouvées pour {formData.brand} {formData.model}
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {autoImages.map((imageUrl, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={imageUrl}
+                          alt={`${formData.brand} ${formData.model} ${index + 1}`}
+                          className="w-full h-20 object-cover rounded-lg border border-green-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setAutoImages(prev => prev.filter((_, i) => i !== index))}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Quantité */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Quantité
+            </label>
+            <input
+              type="number"
+              value={formData.quantity}
+              onChange={(e) => setFormData(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              min="0"
+              step="0.01"
+              required
+            />
+          </div>
+
+          {/* Prix d'achat */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Prix d'achat (€)
+            </label>
+            <input
+              type="number"
+              value={formData.purchasePrice}
+              onChange={(e) => setFormData(prev => ({ ...prev, purchasePrice: Number(e.target.value) }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              min="0"
+              step="0.01"
+              required
+            />
+          </div>
+
+          {/* Prix actuel */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Prix actuel (€)
+              {loadingPrice && (
+                <span className="ml-2 text-blue-600 text-xs">
+                  🔄 Récupération du prix...
+                </span>
+              )}
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                value={formData.currentPrice}
+                onChange={(e) => setFormData(prev => ({ ...prev, currentPrice: Number(e.target.value) }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                min="0"
+                step="0.01"
+                required
+                placeholder="Prix de marché actuel"
+                disabled={loadingPrice}
+              />
+              {loadingPrice && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-between items-center mt-1">
+              <p className="text-xs text-gray-500">
+                💡 Prix récupéré automatiquement (si l'API fonctionne)
+              </p>
+              {formData.symbol && (
+                <button
+                  type="button"
+                  onClick={() => fetchCurrentPrice(formData.symbol!, formData.type)}
+                  disabled={loadingPrice}
+                  className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors disabled:opacity-50"
+                >
+                  🔄 Actualiser le prix
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Date d'achat */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Date d'achat
+            </label>
+            <input
+              type="date"
+              value={formData.purchaseDate}
+              onChange={(e) => setFormData(prev => ({ ...prev, purchaseDate: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Debug d'authentification */}
+          {!isAuthenticated && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+              <p className="text-red-800 text-sm">
+                ⚠️ Problème d'authentification détecté. Veuillez vous reconnecter.
+              </p>
+            </div>
+          )}
+
+          {/* Boutons */}
+          <div className="flex space-x-4 pt-4">
+            <button 
+              type="button" 
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Annuler
+            </button>
+            <button 
+              type="submit"
+              disabled={!isAuthenticated}
+              className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
+                isAuthenticated 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {isAuthenticated ? 'Ajouter' : 'Non connecté'}
             </button>
           </div>
-          
-          <div className="p-6">
-            {renderStepContent()}
-          </div>
-        </div>
+        </form>
       </div>
     </div>
   );
